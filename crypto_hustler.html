@@ -5,16 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Crypto Hustler</title>
   
-  <link rel="manifest" href="data:application/manifest+json,{
-    \"name\": \"Crypto Hustler\",
-    \"short_name\": \"Hustler\",
-    \"start_url\": \".\",
-    \"display\": \"standalone\",
-    \"background_color\": \"#0d0015\",
-    \"theme_color\": \"#0ff\",
-    \"icons\": [{ \"src\": \"data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3Erocket%3C/text%3E%3C/svg%3E\", \"sizes\": \"any\" }]
-  }">
+  <link rel="manifest" href="crypto_hustler.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <style>
+    .coin-icon {
+      vertical-align: middle;
+      width: 28px;
+      height: 28px;
+      margin-right: 6px;
+      margin-bottom: -6px;
+      filter: drop-shadow(0 0 2px #0ff);
+    }
+    .event {
+      color: #ff0;
+      font-weight: bold;
+      animation: blink 1s infinite;
+      font-size: 1.08em;
+      background: #222;
+      border-radius: 7px;
+      padding: 6px 12px;
+      margin: 4px 0;
+      box-shadow: 0 0 8px #0ff;
+      display: inline-block;
+      transition: background 0.3s, box-shadow 0.3s;
+    }
+    .event.positive { color: #0f0; background: #112; }
+    .event.negative { color: #f55; background: #211; }
+    .event.neutral { color: #0ff; background: #113; }
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Roboto+Mono&display=swap');
     body {
       background: #0d0015;
@@ -44,15 +61,25 @@
     .coin { margin: 8px 0; padding: 10px; background: #220044; border-radius: 8px; }
     button {
       background: #0066cc;
-      color: white;
-      border: 1px solid #0f0;
+      color: #fff;
+      border: 2px solid #0ff;
       padding: 8px 15px;
       margin: 3px;
       border-radius: 5px;
       cursor: pointer;
       font-family: 'Roboto Mono';
+      outline: none;
+      transition: box-shadow 0.2s;
     }
-    button:hover { background: #0088ff; }
+    button:focus {
+      box-shadow: 0 0 0 3px #ff0, 0 0 8px #0ff;
+      outline: 2px solid #ff0;
+      outline-offset: 2px;
+    }
+    input:focus {
+      outline: 2px solid #ff0;
+      outline-offset: 2px;
+    }
     input { width: 60px; padding: 5px; background: #000; color: #0f0; border: 1px solid #0f0; }
     .event { color: #ff0; font-weight: bold; animation: blink 1s infinite; }
     @keyframes blink { 50% { opacity: 0.5; } }
@@ -64,7 +91,23 @@
 </head>
 <body>
   <div id="game">
+    <button id="helpBtn" style="position:absolute;top:18px;right:28px;font-size:1.5em;background:#222;border:2px solid #0ff;color:#0ff;border-radius:50%;width:40px;height:40px;z-index:10;cursor:pointer;" onclick="showTutorial()">?</button>
     <h1>CRYPTO HUSTLER</h1>
+
+    <div id="tutorialModal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(13,0,21,0.97);color:#0ff;z-index:1000;text-align:left;padding:0;margin:0;">
+      <div style="max-width:420px;margin:60px auto 0 auto;background:#1a0033;border:2px solid #0ff;border-radius:15px;padding:32px 28px 24px 28px;box-shadow:0 0 20px #0ff;position:relative;">
+        <h2 style="font-family:'Orbitron',sans-serif;text-align:center;margin-top:0;">How to Play</h2>
+        <ul style="font-size:1.1em;line-height:1.6;color:#0ff;padding-left:18px;">
+          <li><strong>Trade meme coins</strong> for profit. Prices change daily and by location.</li>
+          <li><strong>Pay Gas</strong> fees for every trade and travel. Gas spikes can happen!</li>
+          <li><strong>Debt grows</strong> by 2% each day and when you travel. Pay off RugPull Ronny to avoid penalties.</li>
+          <li><strong>Upgrades</strong> give you more wallet space, bots for auto-buy/sell, VPN to block SEC, and tips for pumps.</li>
+          <li><strong>Stake coins</strong> to lock them for a few days and earn rewards when they mature.</li>
+          <li><strong>Survive 30 days</strong> with positive net worth (cash minus debt) to win!</li>
+        </ul>
+        <button onclick="hideTutorial()" style="display:block;margin:18px auto 0 auto;background:#0066cc;color:#fff;border:1px solid #0ff;padding:8px 18px;border-radius:6px;font-family:'Roboto Mono';font-size:1em;cursor:pointer;">Close</button>
+      </div>
+    </div>
     <p>Trade meme coins. Pay off RugPull Ronny. Survive 30 days.</p>
 
     <div id="startScreen">
@@ -85,6 +128,7 @@
 
       <h3>COINS</h3>
       <div id="coins"></div>
+  <div id="coinAria" class="hidden" aria-live="polite"></div>
 
       <h3>ACTIONS</h3>
       <button onclick="travel()">Travel (Pay Gas + 2% Debt)</button>
@@ -121,13 +165,118 @@
   </div>
 
 <script>
+  // Inline SVG icons for coins
+  const COIN_ICONS = {
+    "$DOGE": `<svg class='coin-icon' viewBox='0 0 32 32'><circle cx='16' cy='16' r='15' fill='#c2a15a'/><text x='16' y='21' text-anchor='middle' font-size='16' fill='#fff' font-family='Orbitron'>D</text></svg>`,
+    "$PEPE": `<svg class='coin-icon' viewBox='0 0 32 32'><circle cx='16' cy='16' r='15' fill='#4caf50'/><text x='16' y='21' text-anchor='middle' font-size='16' fill='#fff' font-family='Orbitron'>P</text></svg>`,
+    "$SHIB": `<svg class='coin-icon' viewBox='0 0 32 32'><circle cx='16' cy='16' r='15' fill='#e65100'/><text x='16' y='21' text-anchor='middle' font-size='16' fill='#fff' font-family='Orbitron'>S</text></svg>`,
+    "$FART": `<svg class='coin-icon' viewBox='0 0 32 32'><ellipse cx='16' cy='16' rx='15' ry='12' fill='#ffd600'/><text x='16' y='21' text-anchor='middle' font-size='16' fill='#333' font-family='Orbitron'>F</text></svg>`,
+    "$WIF": `<svg class='coin-icon' viewBox='0 0 32 32'><rect x='2' y='2' width='28' height='28' rx='7' fill='#2196f3'/><text x='16' y='21' text-anchor='middle' font-size='16' fill='#fff' font-family='Orbitron'>W</text></svg>`
+  };
+
+  // AudioPool for better audio handling
+  class AudioPool {
+    constructor(src, size=3) {
+      this.pool = Array.from({length:size},()=>{
+        const a = new Audio(src);
+        a.preload = 'auto';
+        return a;
+      });
+      this.idx = 0;
+    }
+    play() {
+      const a = this.pool[this.idx];
+      a.currentTime = 0;
+      a.volume = 0.3;
+      a.play().catch(()=>{});
+      this.idx = (this.idx+1)%this.pool.length;
+    }
+  }
+  const audioPools = {
+    buy: new AudioPool("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBQAAAP//"),
+    sell: new AudioPool("data:audio/wav;base64,UklGRiQCAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YSQCAACAgICAhYqFbF1fdJivrJBhNjVgodDbq2EcBQAAAP//"),
+    win: new AudioPool("data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="),
+    lose: new AudioPool("data:audio/wav;base64,UklGRiQCAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YSQCAACAgICA")
+  };
+  // Accessibility: track selected coin for keyboard navigation
+  let selectedCoinIdx = 0;
+  function setSelectedCoin(idx) {
+    selectedCoinIdx = idx;
+    updateUI();
+    // Announce selected coin for screen readers
+    const coinAria = document.getElementById('coinAria');
+    coinAria.textContent = `Selected coin: ${COINS[selectedCoinIdx]}`;
+  }
+
+  // Keyboard controls
+  document.addEventListener('keydown', function(e) {
+    if (screens.game.classList.contains('hidden')) return;
+    // Left/right to change coin
+    if (e.key === 'ArrowLeft') {
+      setSelectedCoin((selectedCoinIdx - 1 + COINS.length) % COINS.length);
+      e.preventDefault();
+    } else if (e.key === 'ArrowRight') {
+      setSelectedCoin((selectedCoinIdx + 1) % COINS.length);
+      e.preventDefault();
+    }
+    // Number keys to set buy amount
+    if (/^[1-9]$/.test(e.key)) {
+      const coin = COINS[selectedCoinIdx];
+      const amtInput = document.getElementById(`amt-${coin}`);
+      if (amtInput) {
+        amtInput.value = e.key;
+        amtInput.focus();
+      }
+      e.preventDefault();
+    }
+    // Enter to buy selected coin
+    if (e.key === 'Enter') {
+      const coin = COINS[selectedCoinIdx];
+      buy(coin);
+      e.preventDefault();
+    }
+  });
+  // Tutorial modal logic
+  function showTutorial() {
+    document.getElementById('tutorialModal').style.display = 'block';
+  }
+  function hideTutorial() {
+    document.getElementById('tutorialModal').style.display = 'none';
+  }
+  // Show tutorial on first load
+  window.addEventListener('DOMContentLoaded', function() {
+    showTutorial();
+  });
+  // Helper for coin-specific decimals and K/M/B notation
+  function formatPrice(coin, price) {
+    let decimals = 2;
+    if (coin === "$PEPE" || coin === "$SHIB" || coin === "$FART") decimals = 8;
+    else if (coin === "$DOGE") decimals = 4;
+    else if (coin === "$WIF") decimals = 2;
+    // K/M/B notation for large numbers
+    let val = price;
+    let suffix = "";
+    if (val >= 1e9) { val = val / 1e9; suffix = "B"; }
+    else if (val >= 1e6) { val = val / 1e6; suffix = "M"; }
+    else if (val >= 1e3) { val = val / 1e3; suffix = "K"; }
+    return val.toFixed(decimals) + suffix;
+  }
+
+  // Helper for formatting amounts (holdings)
+  function formatAmount(coin, amt) {
+    if (amt >= 1e9) return (amt/1e9).toFixed(2) + "B";
+    if (amt >= 1e6) return (amt/1e6).toFixed(2) + "M";
+    if (amt >= 1e3) return (amt/1e3).toFixed(2) + "K";
+    if (coin === "$PEPE" || coin === "$SHIB" || coin === "$FART") return amt.toFixed(2);
+    return amt.toString();
+  }
   const LOCATIONS = ["Solana DEX", "Ethereum", "Base", "Binance", "Pump.fun"];
   const COINS = ["$DOGE", "$PEPE", "$SHIB", "$FART", "$WIF"];
   const BASE_PRICES = { "$DOGE":0.17, "$PEPE":0.000012, "$SHIB":0.000018, "$FART":0.000069, "$WIF":2.4 };
   const TRADE_GAS = [1, 120, 5, 30, 2];
 
   let player = { cash:2000, debt:5500, day:1, location:0, inventory:{}, maxSpace:5, upgrades:{}, stakes:[] };
-  let prices = {}, prevPrices = {}, eventLog = "", nextPump = null;
+  let prices = {}, prevPrices = {}, displayedPrices = {}, eventLogEntries = [], nextPump = null;
 
   const screens = {
     start: document.getElementById("startScreen"),
@@ -148,39 +297,41 @@
     prices = {...BASE_PRICES};
     prevPrices = {...BASE_PRICES};
     nextPump = null;
-    eventLog="";
+  eventLogEntries = [];
     updatePrices();
   }
 
   function showScreen(s){ Object.values(screens).forEach(v=>v.classList.add("hidden")); screens[s].classList.remove("hidden"); }
 
-  function getPrice(coin){
-    const base = prices[coin];
-    const fluct = 0.5 + Math.random()*1.5;
-    const locMod = 0.8 + player.location*0.08;
-    return base*fluct*locMod;
+  // Prices for each coin are now snapshotted once per day/tick
+  function updateDisplayedPrices() {
+    displayedPrices = {};
+    COINS.forEach(coin => {
+      const base = prices[coin];
+      const fluct = 0.5 + Math.random()*1.5;
+      const locMod = 0.8 + player.location*0.08;
+      displayedPrices[coin] = base * fluct * locMod;
+    });
   }
 
   function priceArrow(coin){
-    const cur = getPrice(coin);
+    const cur = displayedPrices[coin];
     const prev = prevPrices[coin] || cur;
     const diff = cur/prev - 1;
     return diff>0.001 ? `<span style="color:#0f0">up</span>` : diff<-0.001 ? `<span style="color:#f55">down</span>` : "";
   }
 
   function updatePrices(){
-    prevPrices = {...prices};
+    prevPrices = {...displayedPrices};
     COINS.forEach(c=>{
       let change = 0.7 + Math.random()*0.6;
       if(Math.random()<0.05) change *= Math.random()<0.5?0.1:5;
       prices[c] *= change;
     });
+    updateDisplayedPrices();
   }
 
   function updateUI(){
-    const lines = eventLog.split('</p>');
-    if (lines.length > 9) eventLog = lines.slice(0, 8).join('</p>') + '</p>';
-
     document.getElementById("day").textContent = player.day;
     document.getElementById("cash").textContent = player.cash.toFixed(2);
     document.getElementById("debt").textContent = player.debt.toFixed(0);
@@ -188,35 +339,93 @@
     document.getElementById("space").textContent = totalHeld();
     document.getElementById("maxSpace").textContent = player.maxSpace;
 
+    // Calculate Net Worth
+    let portfolioValue = 0;
+    COINS.forEach(coin => {
+      portfolioValue += displayedPrices[coin] * player.inventory[coin];
+    });
+    const netWorth = player.cash + portfolioValue - player.debt;
+    let netWorthElem = document.getElementById("netWorth");
+    if (!netWorthElem) {
+      // Insert Net Worth display above coins
+      const statsDiv = document.querySelector('.stats');
+      netWorthElem = document.createElement('div');
+      netWorthElem.id = "netWorth";
+      netWorthElem.style.fontSize = "1.1em";
+      netWorthElem.style.margin = "8px 0";
+      statsDiv.appendChild(netWorthElem);
+    }
+    netWorthElem.innerHTML = `<strong>Net Worth:</strong> $${netWorth.toLocaleString(undefined, {maximumFractionDigits:2})}`;
+
     const div = document.getElementById("coins");
     div.innerHTML = "";
-    COINS.forEach(coin=>{
-      const price = getPrice(coin);
+    COINS.forEach((coin, idx) => {
+      const price = displayedPrices[coin];
       const stakesForCoin = player.stakes.filter(s => s.coin === coin);
       const stakedAmt = stakesForCoin.reduce((a, b) => a + b.amount, 0);
       const liquidAmt = player.inventory[coin];
       let lockedText = "";
       if (stakedAmt > 0) {
         const daysLeft = Math.min(...stakesForCoin.map(s => Math.max(0, s.unlockDay - player.day)));
-        lockedText = ` <small style="color:#0ff">| Staked: ${stakedAmt} (${daysLeft}d)</small>`;
+        lockedText = ` <small style=\"color:#0ff\">| Staked: ${formatAmount(coin, stakedAmt)} (${daysLeft}d)</small>`;
       }
       const row = document.createElement("div");
-      row.className="coin";
+      row.className = "coin";
+      row.setAttribute('tabindex', '0');
+      row.setAttribute('aria-label', `${coin} price $${formatPrice(coin, price)}, holding ${formatAmount(coin, liquidAmt)}`);
+      if (idx === selectedCoinIdx) {
+        row.style.boxShadow = "0 0 0 3px #ff0, 0 0 8px #0ff";
+        row.style.border = "2px solid #ff0";
+      } else {
+        row.style.boxShadow = "none";
+        row.style.border = "none";
+      }
       row.innerHTML = `
-        <strong>${coin}</strong> — $${price.toFixed(6)} ${priceArrow(coin)} 
-        (Hold: ${liquidAmt})${lockedText}<br>
-        <button onclick="buy('${coin}')">Buy</button>
-        <input type="number" id="amt-${coin}" min="1" value="1" style="width:50px">
-        <button onclick="sell('${coin}')">Sell</button>
-        <button onclick="buyMax('${coin}')">Max</button>
-        <button onclick="sellAll('${coin}')">All</button>
-        <button onclick="stake('${coin}')">Stake</button>
+        ${COIN_ICONS[coin]}
+        <strong>${coin}</strong>  $${formatPrice(coin, price)} ${priceArrow(coin)} 
+        (Hold: ${formatAmount(coin, liquidAmt)})${lockedText}<br>
+        <button onclick=\"buy('${coin}')\" aria-label=\"Buy ${coin}\">Buy</button>
+        <input type=\"number\" id=\"amt-${coin}\" min=\"1\" value=\"1\" style=\"width:50px\" aria-label=\"Amount to buy/sell for ${coin}\">
+        <button onclick=\"sell('${coin}')\" aria-label=\"Sell ${coin}\">Sell</button>
+        <button onclick=\"buyMax('${coin}')\" aria-label=\"Buy max ${coin}\">Max</button>
+        <button onclick=\"sellAll('${coin}')\" aria-label=\"Sell all ${coin}\">All</button>
+        <button onclick=\"stake('${coin}')\" aria-label=\"Stake ${coin}\">Stake</button>
       `;
       div.appendChild(row);
     });
 
-    const stakeList = player.stakes.map(s=>`<small>${s.coin}: ${s.amount} → day ${s.unlockDay}</small>`).join("<br>");
-    document.getElementById("eventLog").innerHTML = (stakeList?`<div>${stakeList}</div>`:"") + eventLog;
+    // Upgrade buttons: afford/owned state
+    const upgradeTypes = [
+      {type:'wallet', label:'+5 Wallet Slots ($500)'},
+      {type:'bot', label:'Auto-Buy Bot ($2000)'},
+      {type:'vpn', label:'VPN (Evade SEC, $1000)'},
+      {type:'hwWallet', label:'Hardware Wallet ($4000)'},
+      {type:'sellBot', label:'Bot: Sell-High ($1500)'},
+      {type:'tip', label:'Insider Tip ($250)'}
+    ];
+    const costs = {wallet:500, bot:2000, vpn:1000, hwWallet:4000, sellBot:1500, tip:250};
+    const upgradeDiv = document.querySelector('.upgrade');
+    if (upgradeDiv) {
+      upgradeDiv.innerHTML = '<strong>Upgrades:</strong><br>';
+      upgradeTypes.forEach(upg => {
+        let owned = false;
+        if (upg.type === 'wallet') owned = player.maxSpace > 5;
+        else if (upg.type === 'bot') owned = !!player.upgrades.bot;
+        else if (upg.type === 'vpn') owned = !!player.upgrades.vpn;
+        else if (upg.type === 'hwWallet') owned = !!player.upgrades.hwWallet;
+        else if (upg.type === 'sellBot') owned = !!player.upgrades.sellBot;
+        // tip can be bought multiple times, so never 'owned'
+        let disabled = player.cash < costs[upg.type] || owned;
+        let btnText = owned && upg.type !== 'tip' ? 'Owned' : upg.label;
+        upgradeDiv.innerHTML += `<button onclick=\"buyUpgrade('${upg.type}')\" ${disabled ? 'disabled' : ''} style=\"margin:3px;${owned && upg.type !== 'tip' ? 'background:#444;color:#aaa;border:1px solid #888;' : ''}\">${btnText}</button>`;
+      });
+    }
+
+    // Render top N event log entries
+    const N = 8;
+    const stakeList = player.stakes.map(s=>`<small>${s.coin}: ${s.amount}  day ${s.unlockDay}</small>`).join("<br>");
+    const eventLogHtml = eventLogEntries.slice(0, N).join("");
+    document.getElementById("eventLog").innerHTML = (stakeList?`<div>${stakeList}</div>`:"") + eventLogHtml;
   }
 
   function totalHeld(){ return Object.values(player.inventory).reduce((a,b)=>a+b,0); }
@@ -231,7 +440,7 @@
   function buy(coin){
     if(!payGas()) return;
     const amt = parseInt(document.getElementById(`amt-${coin}`).value)||1;
-    const price = getPrice(coin);
+    const price = displayedPrices[coin];
     const cost = price*amt;
     if(player.cash < cost){ alert("Not enough cash!"); return; }
     if(totalHeld()+amt > player.maxSpace){ alert("Wallet full!"); return; }
@@ -245,7 +454,7 @@
     if(!payGas()) return;
     const amt = parseInt(document.getElementById(`amt-${coin}`).value)||1;
     if(player.inventory[coin] < amt){ alert("Not enough!"); return; }
-    const price = getPrice(coin);
+    const price = displayedPrices[coin];
     const gain = price*amt;
     player.cash += gain;
     player.inventory[coin] -= amt;
@@ -254,7 +463,7 @@
   }
 
   function buyMax(coin){
-    const price = getPrice(coin);
+    const price = displayedPrices[coin];
     const gas = TRADE_GAS[player.location] * (player.tempGasMul || 1);
     const cashAfterGas = player.cash - gas;
     if (cashAfterGas < 0) { alert("Not enough cash for gas!"); return; }
@@ -273,7 +482,7 @@
     const amt = player.inventory[coin];
     if(amt===0) return;
     if(!payGas()) return;
-    const price = getPrice(coin);
+    const price = displayedPrices[coin];
     const gain = price * amt;
     player.cash += gain;
     player.inventory[coin] -= amt;
@@ -287,7 +496,7 @@
     const days = 3 + Math.floor(Math.random()*3);
     player.inventory[coin] -= amt;
     player.stakes.push({coin, amount:amt, unlockDay:player.day+days});
-    eventLog = `<p>Staked ${amt} ${coin} for ${days} days</p>` + eventLog;
+  eventLogEntries.unshift(`<p>Staked ${amt} ${coin} for ${days} days</p>`);
     updateUI();
   }
 
@@ -296,7 +505,7 @@
       if(s.unlockDay <= player.day){
         const reward = Math.floor(s.amount * (1 + 0.05 + Math.random()*0.05));
         player.inventory[s.coin] += reward;
-        eventLog = `<p>Stake matured! +${reward-s.amount} ${s.coin}</p>` + eventLog;
+  eventLogEntries.unshift(`<p>Stake matured! +${reward-s.amount} ${s.coin}</p>`);
         return false;
       }
       return true;
@@ -306,7 +515,7 @@
   function travel(){
     player.location = (player.location + 1 + Math.floor(Math.random()*3)) % LOCATIONS.length;
     player.debt *= 1.02;
-    eventLog = `<p class="event">Traveled to ${LOCATIONS[player.location]}! +2% debt</p>` + eventLog;
+  eventLogEntries.unshift(`<p class="event">Traveled to ${LOCATIONS[player.location]}! +2% debt</p>`);
     updatePrices();
     randomEvent();
     updateUI();
@@ -321,10 +530,10 @@
     if(type==="vpn") player.upgrades.vpn = true;
     if(type==="hwWallet") player.upgrades.hwWallet = true;
     if(type==="sellBot") player.upgrades.sellBot = true;
-    if(type==="tip"){ 
-        nextPump = COINS[Math.floor(Math.random()*COINS.length)]; 
-        eventLog = `<p>Insider Tip: Keep an eye on ${nextPump}...</p>` + eventLog;
-    }
+  if(type==="tip"){ 
+    nextPump = COINS[Math.floor(Math.random()*COINS.length)]; 
+    eventLogEntries.unshift(`<p>Insider Tip: Keep an eye on ${nextPump}...</p>`);
+  }
     updateUI();
   }
 
@@ -334,7 +543,7 @@
       nextPump = null;
       const pumpAmount = 2 + Math.random() * 3;
       prices[coinToPump] *= pumpAmount;
-      eventLog = `<p class="event">INSIDER TIP PAID OFF! ${coinToPump} pumps ${(pumpAmount*100-100).toFixed(0)}%! rocket</p>` + eventLog;
+  eventLogEntries.unshift(`<p class="event">INSIDER TIP PAID OFF! ${coinToPump} pumps ${(pumpAmount*100-100).toFixed(0)}%! rocket</p>`);
       updateUI();
       return;
     }
@@ -344,11 +553,11 @@
     if(player.location===4 && Math.random()<0.25){
       const c = COINS[Math.floor(Math.random()*COINS.length)];
       prices[c] *= 0.05;
-      eventLog = `<p class="event">RUG PULL on ${c}! Price -95%!</p>` + eventLog;
+  eventLogEntries.unshift(`<p class="event">RUG PULL on ${c}! Price -95%!</p>`);
       updateUI(); return;
     }
     if(player.location===1 && Math.random()<0.2){
-      eventLog = `<p class="event">GAS SPIKE! All trade fees x10 today!</p>` + eventLog;
+  eventLogEntries.unshift(`<p class="event">GAS SPIKE! All trade fees x10 today!</p>`);
       player.tempGasMul = 10;
       updateUI(); return;
     }
@@ -369,20 +578,25 @@
       }
     ];
     
-    eventLog = `<p class="event">${evs[Math.floor(Math.random()*evs.length)]()}</p>` + eventLog;
+    // Make event messages more readable and animated
+    const msg = evs[Math.floor(Math.random()*evs.length)]();
+    let cls = "neutral";
+    if (msg.includes("+")) cls = "positive";
+    if (msg.includes("-") || msg.includes("Lost") || msg.includes("RUG")) cls = "negative";
+    eventLogEntries.unshift(`<p class="event ${cls}">${msg}</p>`);
     updateUI();
   }
 
   function ronnyEvent(){
     if(Math.random()>0.15) return;
     const demand = 300 + Math.floor(Math.random()*500);
-    eventLog = `<p class="event">RugPull Ronny demands $${demand} NOW!</p>` + eventLog;
+    eventLogEntries.unshift(`<p class="event">RugPull Ronny demands $${demand} NOW!</p>`);
     if(player.cash >= demand){
       player.cash -= demand;
-      eventLog = `<p>Paid Ronny $${demand}</p>` + eventLog;
+      eventLogEntries.unshift(`<p>Paid Ronny $${demand}</p>`);
     }else{
       player.debt *= 1.10;
-      eventLog = `<p>Couldn't pay – debt +10% penalty!</p>` + eventLog;
+      eventLogEntries.unshift(`<p>Couldn't pay – debt +10% penalty!</p>`);
     }
     updateUI();
   }
@@ -393,14 +607,14 @@
     if(player.cash < amt){ alert("Not enough cash!"); return; }
     player.cash -= amt;
     player.debt -= amt;
-    eventLog = `<p>Paid $${amt} to Ronny. Debt now $${player.debt.toFixed(0)}</p>` + eventLog;
+  eventLogEntries.unshift(`<p>Paid $${amt} to Ronny. Debt now $${player.debt.toFixed(0)}</p>`);
     updateUI();
   }
 
   function endDay(){
     if (player.tempGasMul) {
       delete player.tempGasMul;
-      eventLog = "<p>Gas prices are back to normal.</p>" + eventLog;
+      eventLogEntries.unshift("<p>Gas prices are back to normal.</p>");
     }
 
     if(player.upgrades.bot){
@@ -439,26 +653,21 @@
     updateUI();
   }
 
-  function endGame(){
-    const score = Math.floor(player.cash - player.debt);
-    document.getElementById("finalScore").innerHTML = `
-      Final Cash: $${player.cash.toFixed(2)}<br>
-      Final Debt: $${player.debt.toFixed(0)}<br>
-      <strong>Net Worth: $${score.toLocaleString()}</strong><br>
-      ${score>0?"YOU SURVIVED!":"BUSTED!"}
-    `;
-    playSound(player.cash > player.debt ? "win" : "lose");
-    showScreen("end");
-  }
-
-  function saveScore(){
-    const name = document.getElementById("playerName").value||"Anon Degen";
-    const score = Math.floor(player.cash - player.debt);
-    const lb = JSON.parse(localStorage.getItem("cryptoHustlerLB")||"[]");
-    lb.push({name,score,date:new Date().toLocaleDateString()});
-    lb.sort((a,b)=>b.score-a.score);
-    localStorage.setItem("cryptoHustlerLB",JSON.stringify(lb.slice(0,10)));
-    showLeaderboard();
+  function resetGame(){
+    player = {
+      cash:2000, debt:5500, day:1, location:0,
+      inventory:Object.fromEntries(COINS.map(c=>[c,0])),
+      maxSpace:5,
+      upgrades:{wallet:1,bot:false,vpn:false,hwWallet:false,sellBot:false},
+      stakes:[]
+    };
+    prices = {...BASE_PRICES};
+    displayedPrices = {...BASE_PRICES};
+    prevPrices = {...BASE_PRICES};
+    nextPump = null;
+    eventLog="";
+    updateDisplayedPrices();
+    updatePrices();
   }
 
   function showLeaderboard(){
@@ -473,13 +682,7 @@
   function restart(){ showScreen("start"); }
 
   function playSound(type){
-    const audio = new Audio();
-    audio.volume = 0.3;
-    if(type==="buy") audio.src = "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBQAAAP//";
-    else if (type === "sell") audio.src = "data:audio/wav;base64,UklGRiQCAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YSQCAACAgICAhYqFbF1fdJivrJBhNjVgodDbq2EcBQAAAP//";
-    else if (type === "win") audio.src = "data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
-    else if (type === "lose") audio.src = "data:audio/wav;base64,UklGRiQCAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YSQCAACAgICA";
-    audio.play().catch(()=>{});
+  if (audioPools[type]) audioPools[type].play();
   }
 
   showScreen("start");
