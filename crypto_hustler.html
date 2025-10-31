@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Crypto Hustler</title>
+  
+  <link rel="manifest" href="data:application/manifest+json,{
+    \"name\": \"Crypto Hustler\",
+    \"short_name\": \"Hustler\",
+    \"start_url\": \".\",
+    \"display\": \"standalone\",
+    \"background_color\": \"#0d0015\",
+    \"theme_color\": \"#0ff\",
+    \"icons\": [{ \"src\": \"data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3Erocket%3C/text%3E%3C/svg%3E\", \"sizes\": \"any\" }]
+  }">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Roboto+Mono&display=swap');
+    body {
+      background: #0d0015;
+      color: #0f0;
+      font-family: 'Roboto Mono', monospace;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+      overflow-x: hidden;
+    }
+    h1 {
+      font-family: 'Orbitron', sans-serif;
+      color: #0ff;
+      text-shadow: 0 0 10px #0ff;
+      margin: 10px 0;
+    }
+    #game {
+      max-width: 800px;
+      margin: 0 auto;
+      background: #1a0033;
+      border: 2px solid #0f0;
+      border-radius: 15px;
+      padding: 20px;
+      box-shadow: 0 0 20px #0f0;
+    }
+    .stats { font-size: 1.1em; margin: 15px 0; }
+    .coin { margin: 8px 0; padding: 10px; background: #220044; border-radius: 8px; }
+    button {
+      background: #0066cc;
+      color: white;
+      border: 1px solid #0f0;
+      padding: 8px 15px;
+      margin: 3px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-family: 'Roboto Mono';
+    }
+    button:hover { background: #0088ff; }
+    input { width: 60px; padding: 5px; background: #000; color: #0f0; border: 1px solid #0f0; }
+    .event { color: #ff0; font-weight: bold; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0.5; } }
+    .upgrade { background: #330066; margin: 10px 0; padding: 10px; border-radius: 8px; }
+    #leaderboard { margin-top: 20px; color: #0ff; }
+    .hidden { display: none; }
+    small { font-size: 0.8em; }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <h1>CRYPTO HUSTLER</h1>
+    <p>Trade meme coins. Pay off RugPull Ronny. Survive 30 days.</p>
+
+    <div id="startScreen">
+      <button onclick="startGame()">START NEW GAME</button>
+      <button onclick="showLeaderboard()">LEADERBOARD</button>
+    </div>
+
+    <div id="gameScreen" class="hidden">
+      <div class="stats">
+        Day: <span id="day">1</span>/30 | 
+        Cash: $<span id="cash">2000</span> | 
+        Debt: $<span id="debt">5500</span><br>
+        Location: <span id="location">Solana DEX</span> | 
+        Wallet: <span id="space">0</span>/<span id="maxSpace">5</span> slots
+      </div>
+
+      <div id="eventLog"></div>
+
+      <h3>COINS</h3>
+      <div id="coins"></div>
+
+      <h3>ACTIONS</h3>
+      <button onclick="travel()">Travel (Pay Gas + 2% Debt)</button>
+      <button onclick="payDebt()">Pay Ronny</button>
+      <br><br>
+
+      <div class="upgrade">
+        <strong>Upgrades:</strong><br>
+        <button onclick="buyUpgrade('wallet')">+5 Wallet Slots ($500)</button>
+        <button onclick="buyUpgrade('bot')">Auto-Buy Bot ($2000)</button>
+        <button onclick="buyUpgrade('vpn')">VPN (Evade SEC, $1000)</button>
+        <br>
+        <button onclick="buyUpgrade('hwWallet')">Hardware Wallet ($4000)</button>
+        <button onclick="buyUpgrade('sellBot')">Bot: Sell-High ($1500)</button>
+        <button onclick="buyUpgrade('tip')">Insider Tip ($250)</button>
+      </div>
+
+      <button onclick="endDay()">End Day</button>
+    </div>
+
+    <div id="endScreen" class="hidden">
+      <h2>GAME OVER</h2>
+      <p id="finalScore"></p>
+      <input type="text" id="playerName" placeholder="Your Name" />
+      <button onclick="saveScore()">Save Score</button><br><br>
+      <button onclick="restart()">Play Again</button>
+    </div>
+
+    <div id="leaderboardScreen" class="hidden">
+      <h2>LEADERBOARD</h2>
+      <div id="leaderboard"></div>
+      <button onclick="backToStart()">Back</button>
+    </div>
+  </div>
+
+<script>
+  const LOCATIONS = ["Solana DEX", "Ethereum", "Base", "Binance", "Pump.fun"];
+  const COINS = ["$DOGE", "$PEPE", "$SHIB", "$FART", "$WIF"];
+  const BASE_PRICES = { "$DOGE":0.17, "$PEPE":0.000012, "$SHIB":0.000018, "$FART":0.000069, "$WIF":2.4 };
+  const TRADE_GAS = [1, 120, 5, 30, 2];
+
+  let player = { cash:2000, debt:5500, day:1, location:0, inventory:{}, maxSpace:5, upgrades:{}, stakes:[] };
+  let prices = {}, prevPrices = {}, eventLog = "", nextPump = null;
+
+  const screens = {
+    start: document.getElementById("startScreen"),
+    game: document.getElementById("gameScreen"),
+    end: document.getElementById("endScreen"),
+    leaderboard: document.getElementById("leaderboardScreen")
+  };
+
+  function startGame(){ resetGame(); showScreen("game"); updateUI(); randomEvent(); }
+  function resetGame(){
+    player = {
+      cash:2000, debt:5500, day:1, location:0,
+      inventory:Object.fromEntries(COINS.map(c=>[c,0])),
+      maxSpace:5,
+      upgrades:{wallet:1,bot:false,vpn:false,hwWallet:false,sellBot:false},
+      stakes:[]
+    };
+    prices = {...BASE_PRICES};
+    prevPrices = {...BASE_PRICES};
+    nextPump = null;
+    eventLog="";
+    updatePrices();
+  }
+
+  function showScreen(s){ Object.values(screens).forEach(v=>v.classList.add("hidden")); screens[s].classList.remove("hidden"); }
+
+  function getPrice(coin){
+    const base = prices[coin];
+    const fluct = 0.5 + Math.random()*1.5;
+    const locMod = 0.8 + player.location*0.08;
+    return base*fluct*locMod;
+  }
+
+  function priceArrow(coin){
+    const cur = getPrice(coin);
+    const prev = prevPrices[coin] || cur;
+    const diff = cur/prev - 1;
+    return diff>0.001 ? `<span style="color:#0f0">up</span>` : diff<-0.001 ? `<span style="color:#f55">down</span>` : "";
+  }
+
+  function updatePrices(){
+    prevPrices = {...prices};
+    COINS.forEach(c=>{
+      let change = 0.7 + Math.random()*0.6;
+      if(Math.random()<0.05) change *= Math.random()<0.5?0.1:5;
+      prices[c] *= change;
+    });
+  }
+
+  function updateUI(){
+    const lines = eventLog.split('</p>');
+    if (lines.length > 9) eventLog = lines.slice(0, 8).join('</p>') + '</p>';
+
+    document.getElementById("day").textContent = player.day;
+    document.getElementById("cash").textContent = player.cash.toFixed(2);
+    document.getElementById("debt").textContent = player.debt.toFixed(0);
+    document.getElementById("location").textContent = LOCATIONS[player.location];
+    document.getElementById("space").textContent = totalHeld();
+    document.getElementById("maxSpace").textContent = player.maxSpace;
+
+    const div = document.getElementById("coins");
+    div.innerHTML = "";
+    COINS.forEach(coin=>{
+      const price = getPrice(coin);
+      const stakesForCoin = player.stakes.filter(s => s.coin === coin);
+      const stakedAmt = stakesForCoin.reduce((a, b) => a + b.amount, 0);
+      const liquidAmt = player.inventory[coin];
+      let lockedText = "";
+      if (stakedAmt > 0) {
+        const daysLeft = Math.min(...stakesForCoin.map(s => Math.max(0, s.unlockDay - player.day)));
+        lockedText = ` <small style="color:#0ff">| Staked: ${stakedAmt} (${daysLeft}d)</small>`;
+      }
+      const row = document.createElement("div");
+      row.className="coin";
+      row.innerHTML = `
+        <strong>${coin}</strong> — $${price.toFixed(6)} ${priceArrow(coin)} 
+        (Hold: ${liquidAmt})${lockedText}<br>
+        <button onclick="buy('${coin}')">Buy</button>
+        <input type="number" id="amt-${coin}" min="1" value="1" style="width:50px">
+        <button onclick="sell('${coin}')">Sell</button>
+        <button onclick="buyMax('${coin}')">Max</button>
+        <button onclick="sellAll('${coin}')">All</button>
+        <button onclick="stake('${coin}')">Stake</button>
+      `;
+      div.appendChild(row);
+    });
+
+    const stakeList = player.stakes.map(s=>`<small>${s.coin}: ${s.amount} → day ${s.unlockDay}</small>`).join("<br>");
+    document.getElementById("eventLog").innerHTML = (stakeList?`<div>${stakeList}</div>`:"") + eventLog;
+  }
+
+  function totalHeld(){ return Object.values(player.inventory).reduce((a,b)=>a+b,0); }
+
+  function payGas(){
+    const gas = TRADE_GAS[player.location] * (player.tempGasMul || 1);
+    if(player.cash < gas){ alert("Not enough cash for gas!"); return false; }
+    player.cash -= gas;
+    return true;
+  }
+
+  function buy(coin){
+    if(!payGas()) return;
+    const amt = parseInt(document.getElementById(`amt-${coin}`).value)||1;
+    const price = getPrice(coin);
+    const cost = price*amt;
+    if(player.cash < cost){ alert("Not enough cash!"); return; }
+    if(totalHeld()+amt > player.maxSpace){ alert("Wallet full!"); return; }
+    player.cash -= cost;
+    player.inventory[coin] += amt;
+    playSound("buy");
+    updateUI();
+  }
+
+  function sell(coin){
+    if(!payGas()) return;
+    const amt = parseInt(document.getElementById(`amt-${coin}`).value)||1;
+    if(player.inventory[coin] < amt){ alert("Not enough!"); return; }
+    const price = getPrice(coin);
+    const gain = price*amt;
+    player.cash += gain;
+    player.inventory[coin] -= amt;
+    playSound("sell");
+    updateUI();
+  }
+
+  function buyMax(coin){
+    const price = getPrice(coin);
+    const gas = TRADE_GAS[player.location] * (player.tempGasMul || 1);
+    const cashAfterGas = player.cash - gas;
+    if (cashAfterGas < 0) { alert("Not enough cash for gas!"); return; }
+    const spaceLeft = player.maxSpace - totalHeld();
+    const canAfford = Math.floor(cashAfterGas / price);
+    const amt = Math.min(spaceLeft, canAfford);
+    if(amt<=0){ alert("Can't buy any!"); return; }
+    player.cash -= gas;
+    player.cash -= price * amt;
+    player.inventory[coin] += amt;
+    playSound("buy");
+    updateUI();
+  }
+
+  function sellAll(coin){
+    const amt = player.inventory[coin];
+    if(amt===0) return;
+    if(!payGas()) return;
+    const price = getPrice(coin);
+    const gain = price * amt;
+    player.cash += gain;
+    player.inventory[coin] -= amt;
+    playSound("sell");
+    updateUI();
+  }
+
+  function stake(coin){
+    const amt = parseInt(document.getElementById(`amt-${coin}`).value)||1;
+    if(player.inventory[coin] < amt){ alert("Not enough!"); return; }
+    const days = 3 + Math.floor(Math.random()*3);
+    player.inventory[coin] -= amt;
+    player.stakes.push({coin, amount:amt, unlockDay:player.day+days});
+    eventLog = `<p>Staked ${amt} ${coin} for ${days} days</p>` + eventLog;
+    updateUI();
+  }
+
+  function resolveStakes(){
+    player.stakes = player.stakes.filter(s=>{
+      if(s.unlockDay <= player.day){
+        const reward = Math.floor(s.amount * (1 + 0.05 + Math.random()*0.05));
+        player.inventory[s.coin] += reward;
+        eventLog = `<p>Stake matured! +${reward-s.amount} ${s.coin}</p>` + eventLog;
+        return false;
+      }
+      return true;
+    });
+  }
+
+  function travel(){
+    player.location = (player.location + 1 + Math.floor(Math.random()*3)) % LOCATIONS.length;
+    player.debt *= 1.02;
+    eventLog = `<p class="event">Traveled to ${LOCATIONS[player.location]}! +2% debt</p>` + eventLog;
+    updatePrices();
+    randomEvent();
+    updateUI();
+  }
+
+  function buyUpgrade(type){
+    const costs = {wallet:500, bot:2000, vpn:1000, hwWallet:4000, sellBot:1500, tip:250};
+    if(player.cash < costs[type]){ alert("Not enough cash!"); return; }
+    player.cash -= costs[type];
+    if(type==="wallet") player.maxSpace +=5;
+    if(type==="bot") player.upgrades.bot = true;
+    if(type==="vpn") player.upgrades.vpn = true;
+    if(type==="hwWallet") player.upgrades.hwWallet = true;
+    if(type==="sellBot") player.upgrades.sellBot = true;
+    if(type==="tip"){ 
+        nextPump = COINS[Math.floor(Math.random()*COINS.length)]; 
+        eventLog = `<p>Insider Tip: Keep an eye on ${nextPump}...</p>` + eventLog;
+    }
+    updateUI();
+  }
+
+  function randomEvent(){
+    if (nextPump) {
+      const coinToPump = nextPump;
+      nextPump = null;
+      const pumpAmount = 2 + Math.random() * 3;
+      prices[coinToPump] *= pumpAmount;
+      eventLog = `<p class="event">INSIDER TIP PAID OFF! ${coinToPump} pumps ${(pumpAmount*100-100).toFixed(0)}%! rocket</p>` + eventLog;
+      updateUI();
+      return;
+    }
+
+    if(Math.random() > 0.45) return;
+
+    if(player.location===4 && Math.random()<0.25){
+      const c = COINS[Math.floor(Math.random()*COINS.length)];
+      prices[c] *= 0.05;
+      eventLog = `<p class="event">RUG PULL on ${c}! Price -95%!</p>` + eventLog;
+      updateUI(); return;
+    }
+    if(player.location===1 && Math.random()<0.2){
+      eventLog = `<p class="event">GAS SPIKE! All trade fees x10 today!</p>` + eventLog;
+      player.tempGasMul = 10;
+      updateUI(); return;
+    }
+
+    const evs = [
+      ()=>{ prices["$DOGE"]*=3; return "ELON TWEET! $DOGE +200%"; },
+      ()=>{ prices["$PEPE"]*=5; return "$PEPE TO THE MOON"; },
+      ()=>{ Object.keys(prices).forEach(c=>prices[c]*=0.7); return "BEAR MARKET! -30%"; },
+      ()=>{ 
+        if(player.upgrades.vpn) return "SEC tried… VPN blocked!";
+        player.cash *= player.upgrades.hwWallet?0.9:0.5;
+        return player.upgrades.hwWallet?"SEC RAID! HW wallet saved most cash":"SEC RAID! Lost 50% cash";
+      },
+      ()=>{ 
+        const win = Math.random()>0.5;
+        player.cash = win? player.cash+1000 : player.cash*0.5;
+        return win?"HACKER FIGHT – YOU WON +$1k!":"HACKED! Lost 50%";
+      }
+    ];
+    
+    eventLog = `<p class="event">${evs[Math.floor(Math.random()*evs.length)]()}</p>` + eventLog;
+    updateUI();
+  }
+
+  function ronnyEvent(){
+    if(Math.random()>0.15) return;
+    const demand = 300 + Math.floor(Math.random()*500);
+    eventLog = `<p class="event">RugPull Ronny demands $${demand} NOW!</p>` + eventLog;
+    if(player.cash >= demand){
+      player.cash -= demand;
+      eventLog = `<p>Paid Ronny $${demand}</p>` + eventLog;
+    }else{
+      player.debt *= 1.10;
+      eventLog = `<p>Couldn't pay – debt +10% penalty!</p>` + eventLog;
+    }
+    updateUI();
+  }
+
+  function payDebt(){
+    const amt = parseInt(prompt("How much to pay Ronny?", "1000"))||0;
+    if(amt<=0) return;
+    if(player.cash < amt){ alert("Not enough cash!"); return; }
+    player.cash -= amt;
+    player.debt -= amt;
+    eventLog = `<p>Paid $${amt} to Ronny. Debt now $${player.debt.toFixed(0)}</p>` + eventLog;
+    updateUI();
+  }
+
+  function endDay(){
+    if (player.tempGasMul) {
+      delete player.tempGasMul;
+      eventLog = "<p>Gas prices are back to normal.</p>" + eventLog;
+    }
+
+    if(player.upgrades.bot){
+      const c = COINS[Math.floor(Math.random()*COINS.length)];
+      if(totalHeld()<player.maxSpace && player.cash > getPrice(c)*10){
+        const price = getPrice(c);
+        if(player.cash >= price) {
+            player.cash -= price;
+            player.inventory[c] += 1;
+            eventLog = `<p>Bot auto-bought 1 ${c}</p>` + eventLog;
+        }
+      }
+    }
+    if(player.upgrades.sellBot){
+      COINS.forEach(coin=>{
+        const cur = getPrice(coin);
+        const prev = prevPrices[coin]||cur;
+        if(cur/prev > 2 && player.inventory[coin]>0){
+          const sellAmt = Math.min(5, player.inventory[coin]);
+          const gain = cur * sellAmt;
+          player.cash += gain;
+          player.inventory[coin] -= sellAmt;
+          eventLog = `<p>Sell-bot dumped ${sellAmt} ${coin}</p>` + eventLog;
+        }
+      });
+    }
+
+    resolveStakes();
+    player.day++;
+    player.debt *= 1.02;
+    updatePrices();
+    randomEvent();
+    ronnyEvent();
+
+    if(player.day>30) endGame();
+    updateUI();
+  }
+
+  function endGame(){
+    const score = Math.floor(player.cash - player.debt);
+    document.getElementById("finalScore").innerHTML = `
+      Final Cash: $${player.cash.toFixed(2)}<br>
+      Final Debt: $${player.debt.toFixed(0)}<br>
+      <strong>Net Worth: $${score.toLocaleString()}</strong><br>
+      ${score>0?"YOU SURVIVED!":"BUSTED!"}
+    `;
+    playSound(player.cash > player.debt ? "win" : "lose");
+    showScreen("end");
+  }
+
+  function saveScore(){
+    const name = document.getElementById("playerName").value||"Anon Degen";
+    const score = Math.floor(player.cash - player.debt);
+    const lb = JSON.parse(localStorage.getItem("cryptoHustlerLB")||"[]");
+    lb.push({name,score,date:new Date().toLocaleDateString()});
+    lb.sort((a,b)=>b.score-a.score);
+    localStorage.setItem("cryptoHustlerLB",JSON.stringify(lb.slice(0,10)));
+    showLeaderboard();
+  }
+
+  function showLeaderboard(){
+    const lb = JSON.parse(localStorage.getItem("cryptoHustlerLB")||"[]");
+    document.getElementById("leaderboard").innerHTML = lb.length?
+      lb.map((s,i)=>`${i+1}. ${s.name} — $${s.score.toLocaleString()} (${s.date})`).join("<br>") :
+      "No scores yet!";
+    showScreen("leaderboard");
+  }
+
+  function backToStart(){ showScreen("start"); }
+  function restart(){ showScreen("start"); }
+
+  function playSound(type){
+    const audio = new Audio();
+    audio.volume = 0.3;
+    if(type==="buy") audio.src = "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBQAAAP//";
+    else if (type === "sell") audio.src = "data:audio/wav;base64,UklGRiQCAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YSQCAACAgICAhYqFbF1fdJivrJBhNjVgodDbq2EcBQAAAP//";
+    else if (type === "win") audio.src = "data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+    else if (type === "lose") audio.src = "data:audio/wav;base64,UklGRiQCAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YSQCAACAgICA";
+    audio.play().catch(()=>{});
+  }
+
+  showScreen("start");
+  window.payDebt = payDebt;
+</script>
+</body>
+</html>
